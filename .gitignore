@@ -25,3 +25,11 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+# Training artifacts (added during SKM-TEA baseline work)
+cache/
+outputs/
+wandb/
+*.pt
+*.log
+.hydra/
+__pycache__/

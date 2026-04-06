@@ -1,0 +1,18 @@
+defaults:
+  - base
+
+name: SkmteaDataset
+fold: ???
+
+data_root:
+  default: /home/ram/skmtea_sample
+  
+# For the smoke test we use the same single file for all folds.
+train_files:
+  - MTR_001.h5
+val_files:
+  - MTR_001.h5
+test_files:
+  - MTR_001.h5
+
+echo: 1

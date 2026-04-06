@@ -111,6 +111,42 @@ def get_fastmri_dataset(
 
     return dataset
 
+def get_skmtea_dataset(
+        fold_overwrite,
+        fold,
+        dataset_trafo,
+        data_root,
+        train_files,
+        val_files,
+        test_files,
+        echo=1,
+        path_resolver=None,
+        **dataset_kwargs,
+        ):
+    if fold_overwrite is not None and fold != fold_overwrite:
+        logging.info(f"Overwriting fold {fold} with {fold_overwrite}")
+        fold = fold_overwrite
+
+    if "train" in fold:
+        file_list = train_files
+    elif "val" in fold:
+        file_list = val_files
+    elif "test" in fold:
+        file_list = test_files
+    else:
+        raise NotImplementedError(f"Fold {fold} not supported")
+
+    if path_resolver is not None:
+        data_root = path_resolver(data_root)
+
+    from src.datasets.skmtea_slice_dataset import SkmteaSliceDataset
+    return SkmteaSliceDataset(
+        data_root=data_root,
+        file_list=list(file_list),
+        echo=echo,
+        transform=dataset_trafo,
+    )
+
 def get_dataset(
         name : str,
         dataset_trafo : Optional[Any] = None,
@@ -127,7 +163,13 @@ def get_dataset(
             fold_overwrite=fold_overwrite,
             **cfg_kwargs
         )
-
+    elif name == "SkmteaDataset":
+        dataset = get_skmtea_dataset(
+            dataset_trafo=dataset_trafo,
+            path_resolver=path_resolver,
+            fold_overwrite=fold_overwrite,
+            **cfg_kwargs,
+        )
     else: 
         raise NotImplementedError(f"Dataset {name} not supported")
 
