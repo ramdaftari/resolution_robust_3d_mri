@@ -116,9 +116,12 @@ def get_skmtea_dataset(
         fold,
         dataset_trafo,
         data_root,
-        train_files,
-        val_files,
-        test_files,
+        train_files=None,
+        val_files=None,
+        test_files=None,
+        train_csv=None,
+        val_csv=None,
+        test_csv=None,
         echo=1,
         path_resolver=None,
         **dataset_kwargs,
@@ -128,13 +131,19 @@ def get_skmtea_dataset(
         fold = fold_overwrite
 
     if "train" in fold:
-        file_list = train_files
+        file_list, csv_path = train_files, train_csv
     elif "val" in fold:
-        file_list = val_files
+        file_list, csv_path = val_files, val_csv
     elif "test" in fold:
-        file_list = test_files
+        file_list, csv_path = test_files, test_csv
     else:
         raise NotImplementedError(f"Fold {fold} not supported")
+
+    if (file_list is None) == (csv_path is None):
+        raise ValueError(
+            f"get_skmtea_dataset: fold={fold} must specify exactly one of "
+            f"file list or csv (got file_list={file_list}, csv_path={csv_path})"
+        )
 
     if path_resolver is not None:
         data_root = path_resolver(data_root)
@@ -142,7 +151,8 @@ def get_skmtea_dataset(
     from src.datasets.skmtea_slice_dataset import SkmteaSliceDataset
     return SkmteaSliceDataset(
         data_root=data_root,
-        file_list=list(file_list),
+        file_list=list(file_list) if file_list is not None else None,
+        csv_path=csv_path,
         echo=echo,
         transform=dataset_trafo,
     )

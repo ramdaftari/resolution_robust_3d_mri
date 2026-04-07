@@ -205,7 +205,7 @@ class FastMRI2DDataTransform(BaseDatasetTrafo[SliceDatasetSample]):
                         target_torch = target_torch.norm(dim=0)
                     elif self.multicoil_reduction_op == "norm_sum_sensmaps":
                         S = torch.from_numpy(attrs["sens_maps"]).to(target_torch.device)
-                        target_torch = torch.view_as_real(torch.sum(torch.view_as_complex(target_torch) * torch.conj(S), dim=dim))
+                        target_torch = torch.view_as_real(torch.sum(torch.view_as_complex(target_torch) * torch.conj(S), dim=0))
                     else:
                         raise NotImplementedError(f"Reduction operation {self.multicoil_reduction_op} not supported")
 

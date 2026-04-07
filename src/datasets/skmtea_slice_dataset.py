@@ -37,7 +37,8 @@ class SkmteaSliceDataset(BaseDataset):
     def __init__(
         self,
         data_root: Union[str, Path],
-        file_list: Sequence[str],
+        file_list: Optional[Sequence[str]] = None,
+        csv_path: Optional[Union[str, Path]] = None,
         echo: int = 1,
         transform: Optional[Callable] = None,
         return_sensmaps: bool = True,
@@ -45,12 +46,18 @@ class SkmteaSliceDataset(BaseDataset):
     ):
         super().__init__()
         self.data_root = Path(data_root)
+        if (file_list is None) == (csv_path is None):
+            raise ValueError(
+                "SkmteaSliceDataset: provide exactly one of `file_list` or `csv_path`"
+            )
+        if csv_path is not None:
+            file_list = self._parse_file_csv(Path(csv_path))
         if echo not in (1, 2):
             raise ValueError(f"echo must be 1 or 2, got {echo}")
         self.echo_idx = echo - 1
         self.transform = transform
         self.return_sensmaps = return_sensmaps
-
+        self._norm_cache: Dict[Path, float] = {}
         self.fpaths: List[Path] = []
         for fn in file_list:
             fp = self.data_root / fn
@@ -79,21 +86,44 @@ class SkmteaSliceDataset(BaseDataset):
 
     def _retrieve_metadata(self, fname: Path) -> Dict[str, Any]:
         with h5py.File(fname, "r") as hf:
-            kspace_full = np.asarray(hf["kspace"][:, :, :, self.echo_idx, :])
+            ks_shape_full = hf["kspace"].shape         # (X, Y, Z, echo, C), no data read
+            ks_shape = (ks_shape_full[0], ks_shape_full[1], ks_shape_full[2], ks_shape_full[4])
             target_vol_shape = hf["target"].shape[:3]
-            num_slices = kspace_full.shape[0]
-            num_coils = kspace_full.shape[3]
             meta: Dict[str, Any] = {
-                "num_slices": num_slices,
-                "num_coils": num_coils,
-                "kspace_shape": tuple(kspace_full.shape),
-                "kspace_vol_norm": float(np.linalg.norm(kspace_full)),
+                "num_slices": int(ks_shape[0]),
+                "num_coils":  int(ks_shape[3]),
+                "kspace_shape": ks_shape,
+                "kspace_vol_norm": None,  # sentinel; not consumed unless scale_target_by_kspacenorm=True
                 "target_vol_shape": tuple(target_vol_shape),
             }
         return meta
 
     def __len__(self) -> int:
         return len(self.raw_samples)
+
+    @staticmethod
+    def _parse_file_csv(csv_path: Path) -> List[str]:
+        """Parse Armeet's SKM-TEA split CSV.
+        Expected columns: id,file_name,scan_id,subject_id (CRLF tolerated).
+        Returns the list of file_name values in order."""
+        import csv
+        if not csv_path.exists():
+            raise FileNotFoundError(f"SKM-TEA split CSV not found: {csv_path}")
+        files: List[str] = []
+        with open(csv_path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "file_name" not in reader.fieldnames:
+                raise ValueError(
+                    f"SKM-TEA CSV {csv_path} missing 'file_name' column; "
+                    f"got fieldnames={reader.fieldnames}"
+                )
+            for row in reader:
+                fn = (row.get("file_name") or "").strip()
+                if fn:
+                    files.append(fn)
+        if not files:
+            raise ValueError(f"SKM-TEA CSV {csv_path} parsed to zero files")
+        return files
 
     def calc_sensmap_files(self):
         """No-op: SKM-TEA files already contain sens maps in the 'maps' key."""
@@ -115,6 +145,9 @@ class SkmteaSliceDataset(BaseDataset):
                 )
             else:
                 sens_slice_np = None
+            if fname not in self._norm_cache:
+                kspace_full = np.asarray(hf["kspace"][:, :, :, self.echo_idx, :])
+                self._norm_cache[fname] = float(np.linalg.norm(kspace_full))
 
         kspace_t = torch.from_numpy(kspace_slice_np).to(torch.complex64)
         kspace_t = kspace_t.permute(2, 0, 1).contiguous()     # (C, Y, Z)
@@ -123,6 +156,7 @@ class SkmteaSliceDataset(BaseDataset):
         target_t = torch.from_numpy(target_slice_np).to(torch.complex64)
 
         attrs: Dict[str, Any] = dict(volume_meta)
+        attrs["kspace_vol_norm"] = self._norm_cache[fname]
         if self.return_sensmaps and sens_slice_np is not None:
             attrs["sens_maps"] = np.moveaxis(sens_slice_np, -1, 0).astype(np.complex64)
 
