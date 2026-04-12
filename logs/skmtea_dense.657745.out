@@ -1,0 +1,35 @@
+==== JOB START 2026-04-09T21:42:11-05:00 ====
+Host: c639-001.vista.tacc.utexas.edu
+Thu Apr  9 21:42:11 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 590.48.01              Driver Version: 590.48.01      CUDA Version: 13.1     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GH200 120GB             On  |   00000009:01:00.0 Off |                    0 |
+| N/A   28C    P0             87W /  900W |       2MiB /  97871MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Python: Python 3.10.16
+Torch: 2.6.0+cu126 CUDA: True NVIDIA GH200 120GB
+CSVs:
+  87 /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/train.csv
+  34 /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/val.csv
+  37 /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/test.csv
+ 158 total
+====================================
+[2026-04-09 21:43:48,102][root][INFO] - SkmteaSliceDataset: 86 volumes, 44032 slices (echo=1)
+[2026-04-09 22:38:54,882][root][INFO] - Overwriting fold train with val
+[2026-04-09 22:38:55,260][root][INFO] - SkmteaSliceDataset: 33 volumes, 16896 slices (echo=1)
+[2026-04-09 23:00:55,480][root][INFO] - Creating model from scratch.
+[2026-04-09 23:00:55,482][root][INFO] - Unused kwargs: {'var_type': 'fixedsmall'}

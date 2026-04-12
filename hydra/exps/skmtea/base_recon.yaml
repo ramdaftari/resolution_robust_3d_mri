@@ -1,0 +1,56 @@
+# @package _global_
+# Base recon config for SKM-TEA. Adapted from hydra/exps/stanford_3D/base_recon.yaml.
+# Deviations from Stanford documented inline.
+defaults:
+  - /dataset: skmtea
+  - override /problem_trafos/fwd_trafo: mri3d
+  - override /problem_trafos/target_trafo: crop_mag
+  - override /problem_trafos/prior_trafo: crop_mag
+  - override /problem_trafos/dataset_trafo: skmtea_recon_calc_mvue   # <- new SKM-TEA trafo
+
+problem_trafos:
+  prior_trafo:
+    scaling_factor: 2.0       # match Stanford exactly
+    move_axis: [-1, 1]
+
+  dataset_trafo:
+    mask_enabled: True
+    mask_accelerations: ???   # set per-experiment yaml; SKM-TEA precomputed: 4,6,8,10,12,16
+    mask_type: 'Poisson2D'    # SKM-TEA paper Sec 4.2: precomputed Poisson-disc masks
+
+dataset:
+  fold: 'test'                # SKM-TEA test split = 36 arthroscopy patients (paper Sec 4.2)
+  data_object_type: 'volumes'
+
+# ----- GEOMETRY (the SKM-TEA-specific part) -----
+# In-plane FOV from SKM-TEA paper Table 5:
+#   acquired matrix: 416 (RO) x 512 (PE)
+#   acquired resolution: 0.38 x 0.31 mm
+#   -> RO FOV = 416 * 0.38 = 158.08 mm
+#   -> PE FOV = 512 * 0.31 = 158.72 mm
+# Stored matrix is ZIP2 zero-padded to 512x512 in-plane (Appendix A.2),
+# but physical FOV is what the FFT cares about.
+#
+# Through-slice (Z): MTR_001.h5 has Z=160 stored = 80 acquired x ZIP2.
+# Slice thickness: NOT in the h5, NOT in the paper Table 5.
+# Standard qDESS knee protocol from Chaudhari refs [3,7] uses ~1.6 mm.
+# 80 acquired slices x 1.6 mm = 128 mm physical Z extent.
+# >>> CONFIRM WITH PETER OR SKM-TEA dataset.csv BEFORE TRUSTING RECON OUTPUT <<<
+#
+# Convention from stanford_3D/base_recon.yaml: [Z, Y, X] = [depth, PE, RO]
+representation:
+  mesh_data:
+    field_of_view: [128.0, 160.0, 160.0]   
+
+diffmodels:
+  load_ema_params_from_path:
+    skmtea_1x_model:
+      default: ???            # path to ema_model_<final>.pt after job 657745 finishes
+
+  mesh_data_per_model:
+    skmtea_1x_model:
+      matrix_size: [160, 512, 512]          
+      field_of_view: [128.0, 160.0, 160.0]     
+
+  model_key: skmtea_1x_model
+  model_use_ema: true

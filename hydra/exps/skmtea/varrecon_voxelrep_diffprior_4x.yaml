@@ -1,0 +1,35 @@
+# @package _global_
+# SKM-TEA variational reconstruction with identity (voxel-grid) representation
+# and diffusion prior. Mirrors hydra/exps/stanford_3D/varrecon_voxelrep_diffprior.yaml.
+#
+# Contrast with varrecon_diffprior_4x.yaml (which uses r3 INN representation):
+# - no 450-wide MLP forward per coord -> much faster per iteration
+# - directly optimizes voxel values; prior-reg mesh == data mesh
+# - no warmstart needed (identity rep initialised from filtered-backproj directly)
+defaults:
+  - skmtea/base_recon
+  - override /representation: identity
+  - override /reconstruction: default_variational_diff
+  - override /sample_logger: with_target
+
+reconstruction:
+  variational:
+    regularization:
+      reg_strength: 0.01      # Stanford voxelrep value
+
+problem_trafos:
+  dataset_trafo:
+    mask_enabled: True
+    mask_accelerations: 4.0
+    mask_type: 'Poisson2D'
+    # target_interpolate_by_factor NOT set -> default 1.0 (full native res).
+    # Matches Stanford's voxelrep exp (which also doesn't interpolate).
+    # If this OOMs or is too slow for a first look, override at command line:
+    #   ++problem_trafos.dataset_trafo.target_interpolate_by_factor=0.25
+
+  fwd_trafo:
+    sensitivitymaps_fillouter: True
+
+diffmodels:
+  model_key: 'skmtea_1x_model'
+  model_use_ema: True

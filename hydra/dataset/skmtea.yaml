@@ -5,14 +5,10 @@ name: SkmteaDataset
 fold: ???
 
 data_root:
-  default: /home/ram/skmtea_sample
-  
-# For the smoke test we use the same single file for all folds.
-train_files:
-  - MTR_001.h5
-val_files:
-  - MTR_001.h5
-test_files:
-  - MTR_001.h5
+  default: /scratch/10846/armeet/datasets/skmtea/files_recon_calib-24
+
+train_csv: /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/train.csv
+val_csv:   /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/val.csv
+test_csv:  /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/test.csv
 
 echo: 1

@@ -16,7 +16,10 @@ from src.representations.mesh import SliceableMesh
 from src.representations.slice_methods import RandomAverageSlabsWithSliceableMesh
 from src.representations.fixed_grid_representation import FixedGridRepresentation
 from src.representations.grid_sampled_representation import GridResamplingRepresentation
-from src.representations.gaussian.gaussian_representation import GaussianRepresentation
+try:
+    from src.representations.gaussian.gaussian_representation import GaussianRepresentation
+except ImportError:
+    GaussianRepresentation = None  # Requires simple_knn/gaussian CUDA submodules; not needed for FixedGridRepresentation path on Vista aarch64
 from src.representations.inns.ffmlp_representation import FFmlpRepresentation
 
 def get_representation(

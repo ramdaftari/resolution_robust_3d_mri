@@ -148,14 +148,37 @@ def get_skmtea_dataset(
     if path_resolver is not None:
         data_root = path_resolver(data_root)
 
-    from src.datasets.skmtea_slice_dataset import SkmteaSliceDataset
-    return SkmteaSliceDataset(
-        data_root=data_root,
-        file_list=list(file_list) if file_list is not None else None,
-        csv_path=csv_path,
-        echo=echo,
-        transform=dataset_trafo,
-    )
+    # Dispatch on data_object_type (default 'slices' preserves training behavior).
+    data_object_type = dataset_kwargs.pop("data_object_type", "slices")
+    # drop fields that pass through dataset yaml but aren't used by these Skmtea classes
+    for _k in ("data_path_sensmaps_train", "data_path_sensmaps_val", "data_path_sensmaps_test",
+               "volume_filter_train", "volume_filter_val", "volume_filter_test",
+               "raw_sample_filter"):
+        dataset_kwargs.pop(_k, None)
+
+    if data_object_type == "slices":
+        from src.datasets.skmtea_slice_dataset import SkmteaSliceDataset
+        return SkmteaSliceDataset(
+            data_root=data_root,
+            file_list=list(file_list) if file_list is not None else None,
+            csv_path=csv_path,
+            echo=echo,
+            transform=dataset_trafo,
+        )
+    elif data_object_type == "volumes":
+        from src.datasets.skmtea_volume_dataset import SkmteaVolumeDataset
+        return SkmteaVolumeDataset(
+            data_root=data_root,
+            file_list=list(file_list) if file_list is not None else None,
+            csv_path=csv_path,
+            echo=echo,
+            transform=dataset_trafo,
+        )
+    else:
+        raise NotImplementedError(
+            f"SKM-TEA data_object_type {data_object_type!r} not supported "
+            f"(expected 'slices' or 'volumes')."
+        )
 
 def get_dataset(
         name : str,

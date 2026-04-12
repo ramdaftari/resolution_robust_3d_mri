@@ -1,0 +1,33 @@
+[project]
+name = "resolution-robust-3d-mri"
+version = "0.1.0"
+description = "Krainovic et al. - variational + diffusion prior baseline"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "torch",
+    "torchvision",
+    "numpy<2.0",
+    "scipy",
+    "h5py",
+    "pandas",
+    "matplotlib",
+    "scikit-image",
+    "pillow",
+    "hydra-core",
+    "omegaconf",
+    "wandb",
+    "tqdm",
+    "einops",
+    "fastmri",
+    "sigpy",
+    "pywavelets",
+    "linear-operator",
+    "ptwt",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+torch = { path = "/work/10471/peterwg/vista/r/3dmri_new/mri3d/wheels/torch-2.6.0+cu126-cp310-cp310-linux_aarch64.whl" }

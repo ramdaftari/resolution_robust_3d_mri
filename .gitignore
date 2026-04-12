@@ -33,3 +33,7 @@ wandb/
 *.log
 .hydra/
 __pycache__/
+uv.lock
+slurm/
+recon_workdir/
+smoke/

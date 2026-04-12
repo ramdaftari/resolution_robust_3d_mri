@@ -1,0 +1,10 @@
+# SKM-TEA reconstruction-time dataset trafo.
+# Mirrors hydra/problem_trafos/dataset_trafo/mri3d_recon_calc_mvue.yaml exactly,
+# except target_scaling_factor matches what the trained model saw at training time.
+defaults:
+  - mri3d_recon_calc_mvue
+
+scale_target_by_kspacenorm: True
+target_scaling_factor: 2.0    # MUST match training value (mri2d_train_calc_mvue.yaml)
+target_type: "fullysampled_rec"
+multicoil_reduction_op: "norm_sum_sensmaps"

@@ -1,0 +1,62 @@
+# @package _global_
+# SKM-TEA variational reconstruction with INN representation + diffusion prior.
+# Adapted from hydra/exps/stanford_3D/varrecon_inn_diffprior_4x.yaml.
+# Deviations from Stanford documented inline.
+defaults:
+  - skmtea/base_recon
+  - override /representation: r3
+  - override /reconstruction: default_variational_diff
+  - override /sample_logger: with_target
+
+representation:
+  warmstart_optim:
+    lr: 0.01
+    psnr_threshold: 40
+    iterations: 20
+
+  arch:
+    # NOTE: Stanford INN was tuned for 320x320 in-plane.
+    # SKM-TEA in-plane is 512x512 (zero-padded from 416x512 acquired).
+    # Mirroring Stanford values verbatim as the most-faithful starting point.
+    # If first recon underfits, the INN width/feats_scale are the first knobs to retune.
+    num_hidden_layers: 5
+    first_layer_feats_scale: 8
+    width: 450
+
+sampler_logger:
+  volume_stats_period: 500
+  volume_stats__wandb_take_mean_slice_period: 500
+
+reconstruction:
+  variational:
+    fitting:
+      optimizer:
+        lr: 0.001
+        iterations: 50000
+        clip_grad_max_norm: null
+        gradient_acc_steps_data_con: [0]
+        gradient_acc_steps_prior_reg: [1, 2, 3, 4]
+
+      lr_scheduler:
+        factor: 0.8
+        patience: 5000
+
+    regularization:
+      reg_strength: 0.0004
+
+problem_trafos:
+  dataset_trafo:
+    mask_enabled: True
+    mask_accelerations: 4.0       # SKM-TEA precomputed Poisson-disc, 4x for first sanity check
+    mask_type: 'Poisson2D'
+    # Stanford uses target_interpolate_by_factor: 0.25 (recon at 25% native res to fit memory).
+    # SKM-TEA at 512x512 -> 0.25 gives 128x128 in-plane, manageable on a single GH200.
+    # Keeping Stanford's value as the faithful default.
+    target_interpolate_by_factor: 0.25
+
+  fwd_trafo:
+    sensitivitymaps_fillouter: True
+
+diffmodels:
+  model_key: 'skmtea_1x_model'
+  model_use_ema: True
