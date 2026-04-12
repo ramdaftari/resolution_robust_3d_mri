@@ -37,3 +37,6 @@ uv.lock
 slurm/
 recon_workdir/
 smoke/
+*.err
+*.out
+logs/
