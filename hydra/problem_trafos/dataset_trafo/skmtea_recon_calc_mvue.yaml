@@ -4,7 +4,7 @@
 defaults:
   - mri3d_recon_calc_mvue
 
-scale_target_by_kspacenorm: True
-target_scaling_factor: 2.0    # MUST match training value (mri2d_train_calc_mvue.yaml)
+scale_target_by_kspacenorm: False
+target_scaling_factor: 1.0    # MUST match training value (mri2d_train_calc_mvue.yaml)
 target_type: "fullysampled_rec"
 multicoil_reduction_op: "norm_sum_sensmaps"

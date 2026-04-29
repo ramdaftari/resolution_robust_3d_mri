@@ -145,13 +145,20 @@ def wandb_kwargs_via_cfg(cfg : DictConfig, use_group_name: bool = True) -> dict:
 
     wandb_name_full = wandb_name if cfg.descr_short is None else f"{wandb_name}_{cfg.descr_short}"
 
+    run_id   = cfg.wandb.get('run_id', None)
+    resume   = cfg.wandb.get('resume', None)
+
     wandb_kwargs = {
         'project': cfg.wandb.project,
         'entity': cfg.wandb.entity,
-        'name': wandb_name_full, # cfg.wandb.name if cfg.wandb.name else None,
+        'name': wandb_name_full,
         'mode': 'online' if cfg.wandb.log else 'disabled',
         'settings': wandb.Settings(code_dir=cfg.wandb.code_dir),
         'group' : wandb_group,
-        'config' : flatten_hydra_config(cfg)
+        'config' : flatten_hydra_config(cfg),
     }
+    if run_id is not None:
+        wandb_kwargs['id'] = run_id
+    if resume is not None:
+        wandb_kwargs['resume'] = resume
     return wandb_kwargs
