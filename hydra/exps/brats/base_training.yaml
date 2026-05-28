@@ -1,0 +1,35 @@
+# @package _global_
+# Base training config for BraTS 2D diffusion prior (full-res single-coil).
+# Mirrors hydra/exps/skmtea/base_training.yaml; only the dataset override
+# and an empirically-calibrated target_scaling_factor differ.
+defaults:
+  - /dataset: brats
+  - override /problem_trafos/fwd_trafo: null
+  - override /problem_trafos/target_trafo: null
+  - override /problem_trafos/prior_trafo: crop_mag
+  - override /problem_trafos/dataset_trafo: mri2d_train_calc_mvue
+
+problem_trafos:
+  prior_trafo:
+    swap_channels: True
+    scaling_factor: 1.0
+
+  dataset_trafo:
+    # BraTS LMDB stores ALREADY-MASKED 4x k-space, so target_type='fullysampled_rec'
+    # would yield zero-filled reconstruction instead of clean image.
+    # BratsSliceDataset surfaces the precomputed clean target (source image
+    # normalized to [0,1], cast to complex64, view_as_real (Y,Z,2)); we consume
+    # it directly via target_type=mvue. Works for both single-coil (C=1) and
+    # multi-coil (C=8) LMDBs since mvue passes target through without
+    # touching sens maps.
+    target_type: 'mvue'
+
+    # target_scaling_factor: calibrated on half-res singlecoil (probe_brats_norm.py
+    # shows post-stage-1 median std ~2.85e-4; SKM-TEA's operating point is 1.44,
+    # so factor = 1.44 / 2.85e-4 ≈ 5050). With norm='ortho' FFT the
+    # sqrt(prod(shape))/||kspace||₂ ratio is resolution-independent (Parseval),
+    # so this factor is valid at full-res too.
+    target_scaling_factor: 5050.0
+
+dataset:
+  fold: 'train'

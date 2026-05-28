@@ -23,6 +23,7 @@ dependencies = [
     "pywavelets",
     "linear-operator",
     "ptwt",
+    "lmdb>=2.2.0",
 ]
 
 [build-system]

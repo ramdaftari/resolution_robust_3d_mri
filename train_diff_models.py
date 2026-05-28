@@ -57,7 +57,10 @@ def get_dataloader(cfg_dataset, dataset_trafo,  cfg_dl, fold, device : str, path
                 )
 
             if cfg_dl.cache_dataset_store_on_disk:
-                torch.save(dataset, cfg_dl.cache_dataset_disk_path)
+                try:
+                    torch.save(dataset, cfg_dl.cache_dataset_disk_path)
+                except Exception as e:
+                    logging.warning(f"Dataset disk cache write failed (continuing without): {e}")
         else:
             dataset = iterable_dataset
 
@@ -114,6 +117,19 @@ def coordinator(cfg : DictConfig) -> None:
         dataloader_val = get_dataloader(cfg_dataset=cfg.dataset,
             dataset_trafo = dataset_trafo, cfg_dl=cfg.diffmodels.val,
             fold="val", device=device, path_resolver=path_resolver)
+
+        # Resolve optional resume_from before the trainer reads optim_kwargs.
+        # Accept either a plain string (path) or a cluster-keyed dict.
+        try:
+            _resume = cfg.diffmodels.train.get("resume_from", None)
+        except Exception:
+            _resume = None
+        if _resume is not None:
+            from omegaconf import DictConfig as _DC
+            if isinstance(_resume, _DC) or isinstance(_resume, dict):
+                _resume = path_resolver(_resume)
+            cfg.diffmodels.train.resume_from = _resume
+            logging.info(f"Will resume training from: {_resume}")
 
         # load the sde model and the score model
         sde = load_sde_model(cfg.diffmodels)

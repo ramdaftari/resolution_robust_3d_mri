@@ -1,0 +1,27 @@
+defaults:
+  - base
+
+name: BratsDataset
+fold: ???
+
+# Full-res single-coil BraTS LMDBs (240x240x155, C=1, identity sens maps,
+# T1ce modality, norm='ortho' FFT). Same LMDB layout as multicoil but C=1.
+data_root_train:
+  default: /scratch/10471/peterwg/brats2021_lmdb/brats_train_240x240x155_4x_singlecoil_lmdb
+data_root_val:
+  default: /scratch/10471/peterwg/brats2021_lmdb/brats_val_240x240x155_4x_singlecoil_lmdb
+data_root_test:
+  default: /scratch/10471/peterwg/brats2021_lmdb/brats_val_240x240x155_4x_singlecoil_lmdb
+
+# Three-plane training (axial=0, coronal=1, sagittal=2 in BraTS NIfTI convention)
+# yields ConcatDataset of three BratsSliceDataset instances over the same LMDB —
+# matches the multi-plane training protocol of Krainovic et al. 2024 §4.1.
+# Per-volume slice counts: axis0=240, axis1=240, axis2=155 → 635 slices/vol.
+readout_axes: [0, 1, 2]
+
+# Identity sens maps (C=1, all ones) are never consumed by the mvue trafo path;
+# skip loading them to save I/O.
+return_sensmaps: False
+volume_cache_size: 1
+
+max_volumes: null

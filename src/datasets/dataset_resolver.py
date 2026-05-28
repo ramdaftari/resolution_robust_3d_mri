@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Tuple, List, Callable
 
 import numpy as np
@@ -158,12 +159,14 @@ def get_skmtea_dataset(
 
     if data_object_type == "slices":
         from src.datasets.skmtea_slice_dataset import SkmteaSliceDataset
+        kspace_norms_path = dataset_kwargs.pop("kspace_norms_path", None)
         return SkmteaSliceDataset(
             data_root=data_root,
             file_list=list(file_list) if file_list is not None else None,
             csv_path=csv_path,
             echo=echo,
             transform=dataset_trafo,
+            kspace_norms_path=kspace_norms_path,
         )
     elif data_object_type == "volumes":
         from src.datasets.skmtea_volume_dataset import SkmteaVolumeDataset
@@ -179,6 +182,85 @@ def get_skmtea_dataset(
             f"SKM-TEA data_object_type {data_object_type!r} not supported "
             f"(expected 'slices' or 'volumes')."
         )
+
+def get_brats_dataset(
+        fold_overwrite,
+        fold,
+        dataset_trafo,
+        data_root_train,
+        data_root_val,
+        data_root_test,
+        readout_axes=(0, 1, 2),
+        return_sensmaps=True,
+        volume_cache_size=1,
+        max_volumes=None,
+        path_resolver=None,
+        **dataset_kwargs,
+        ):
+    """Construct a multi-plane BraTS slice dataset.
+
+    Mirrors the fastMRI three-plane recipe: build one BratsSliceDataset
+    per readout axis (axial / sagittal / coronal) over the same LMDB,
+    then ConcatDataset them so each epoch sees slices from all three
+    anatomical planes — matching the 2D diffusion training protocol of
+    Krainovic et al. (2024), Section 4.1.
+    """
+    if fold_overwrite is not None and fold != fold_overwrite:
+        logging.info(f"Overwriting fold {fold} with {fold_overwrite}")
+        fold = fold_overwrite
+
+    if "train" in fold:
+        data_root = data_root_train
+    elif "val" in fold:
+        data_root = data_root_val
+    elif "test" in fold:
+        data_root = data_root_test
+    else:
+        raise NotImplementedError(f"Fold {fold} not supported")
+
+    if path_resolver is not None:
+        data_root = path_resolver(data_root)
+
+    # drop fields passed through the dataset yaml that BratsSliceDataset
+    # does not consume (mirrors get_skmtea_dataset's defensive pop).
+    for _k in ("volume_filter_train", "volume_filter_val", "volume_filter_test",
+               "raw_sample_filter", "data_object_type"):
+        dataset_kwargs.pop(_k, None)
+
+    from src.datasets.brats_slice_dataset import BratsSliceDataset
+
+    # Resolve the volume key list once (truncated if max_volumes set), so
+    # each per-axis dataset sees the same volumes. None => use all keys.
+    # We go through the module-level cache (_open_lmdb) so this enumeration
+    # share the same Environment handle with the BratsSliceDataset instances
+    # constructed below — lmdb-py refuses two opens of the same path per
+    # process.
+    keys = None
+    if max_volumes is not None:
+        from src.datasets.brats_slice_dataset import _open_lmdb
+        env_shapes = _open_lmdb(Path(data_root) / "shapes")
+        with env_shapes.begin() as txn:
+            all_keys = sorted([k.decode() for k, _ in txn.cursor()],
+                              key=lambda x: int(x))
+        keys = all_keys[: int(max_volumes)]
+        logging.info(f"get_brats_dataset: truncated to first {len(keys)} volumes "
+                     f"(max_volumes={max_volumes})")
+
+    per_axis = [
+        BratsSliceDataset(
+            root_dir=data_root,
+            readout_axis=int(ax),
+            return_sensmaps=return_sensmaps,
+            transform=dataset_trafo,
+            keys=keys,
+            volume_cache_size=volume_cache_size,
+        )
+        for ax in readout_axes
+    ]
+    if len(per_axis) == 1:
+        return per_axis[0]
+    return ConcatDataset(per_axis)
+
 
 def get_dataset(
         name : str,
@@ -203,7 +285,14 @@ def get_dataset(
             fold_overwrite=fold_overwrite,
             **cfg_kwargs,
         )
-    else: 
+    elif name == "BratsDataset":
+        dataset = get_brats_dataset(
+            dataset_trafo=dataset_trafo,
+            path_resolver=path_resolver,
+            fold_overwrite=fold_overwrite,
+            **cfg_kwargs,
+        )
+    else:
         raise NotImplementedError(f"Dataset {name} not supported")
 
     return dataset

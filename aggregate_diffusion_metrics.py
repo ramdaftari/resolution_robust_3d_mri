@@ -47,7 +47,7 @@ def parse_log(path: Path) -> dict[int, tuple[float, float, float]]:
     return found
 
 
-def aggregate(job_dir: Path) -> None:
+def aggregate(job_dir: Path, label_final_as: int | None = None) -> None:
     logs = sorted(job_dir.glob("vol_*/run.log"), key=lambda p: int(p.parent.name.split("_")[1]))
     if not logs:
         print(f"  no vol_*/run.log under {job_dir}")
@@ -65,22 +65,26 @@ def aggregate(job_dir: Path) -> None:
             if step in rows:
                 per_step[step].append(rows[step])
 
-    n_complete = min(len(per_step[s]) for s in EXPECTED_STEPS)
+    populated = [s for s in EXPECTED_STEPS if per_step[s]]
+    # Auto-detect single-step runs: only the final 200-row populated → relabel as step 1
+    # (close_sample_log always appends to ckpt_psnrs[200], regardless of actual iter count).
+    if label_final_as is None and populated == [200] and "single_step" in str(job_dir):
+        label_final_as = 1
+
+    n_complete = (min(len(per_step[s]) for s in populated) if populated else 0)
     print(f"\n=== {job_dir} ===")
-    print(f"  vol logs found: {len(logs)}   complete (all 7 steps): {n_complete}")
+    print(f"  vol logs found: {len(logs)}   complete (all populated steps): {n_complete}")
     if missing:
         print(f"  no SUMMARY found in: {', '.join(missing)}")
     print(f"  {'step':>5}  {'PSNR (dB)':>10}  {'SSIM':>8}  {'NMSE':>10}  {'n':>4}")
     print(f"  {'-'*5}  {'-'*10}  {'-'*8}  {'-'*10}  {'-'*4}")
-    for step in EXPECTED_STEPS:
+    for step in populated:
         rows = per_step[step]
-        if not rows:
-            print(f"  {step:>5}  {'-':>10}  {'-':>8}  {'-':>10}  {0:>4}")
-            continue
         psnrs = [r[0] for r in rows]
         ssims = [r[1] for r in rows]
         nmses = [r[2] for r in rows]
-        print(f"  {step:>5}  {statistics.mean(psnrs):>10.4f}  "
+        display_step = label_final_as if (step == 200 and label_final_as is not None) else step
+        print(f"  {display_step:>5}  {statistics.mean(psnrs):>10.4f}  "
               f"{statistics.mean(ssims):>8.4f}  "
               f"{statistics.mean(nmses):>10.6f}  {len(rows):>4}")
 
@@ -88,13 +92,16 @@ def aggregate(job_dir: Path) -> None:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("job_dirs", nargs="+", type=Path)
+    ap.add_argument("--label-final-as", type=int, default=None,
+                    help="Relabel the final '200' row as this step number "
+                         "(use --label-final-as 1 for single-step runs).")
     args = ap.parse_args()
 
     for d in args.job_dirs:
         if not d.exists():
             print(f"\n=== {d} ===\n  MISSING: directory does not exist", file=sys.stderr)
             continue
-        aggregate(d)
+        aggregate(d, label_final_as=args.label_final_as)
 
 
 if __name__ == "__main__":

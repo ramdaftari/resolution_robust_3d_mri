@@ -22,6 +22,20 @@ train:
   group_shape_by: 'target'
   shuffle: True
   num_workers: 0
+  # Resume across SLURM 2-day boundaries. Pass a path to a resume_latest.pt
+  # (or a cluster-keyed dict resolved via path_resolver). null = fresh run.
+  resume_from: null
+  # Always emit resume_latest.pt alongside model_N.pt at every save tick.
+  save_resume_state: True
+  # Inline unconditional generation after every EMA save. One sample from
+  # pure noise -> evolution.gif + grid.png. Best-effort: failures are
+  # logged and do not kill training. Override per-experiment as needed
+  # (e.g. ++diffmodels.train.inline_gen.size=320 for SKM-TEA).
+  inline_gen:
+    enabled: True
+    size: 240
+    num_steps: 50
+    save_every: 5
   log_dataset_stats_before_training:
     enabled: False
     num_dataloader_stat_samples: -1 # has to be negative or multiple of batch size

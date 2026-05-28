@@ -12,7 +12,7 @@ from src.utils.wandb_utils import tensor_to_wandbimages_dict
 
 from .loss import epsilon_based_loss_fn
 from ..sde import SDE
-from ..utils_save import save_model
+from ..utils_save import save_model, load_resume_state
 
 from src.problem_trafos.prior_target_trafo.base_prior_trafo import BasePriorTrafo
 
@@ -40,11 +40,24 @@ def score_model_trainer(
     loss_fn = epsilon_based_loss_fn 
 
     ema = None
-    if optim_kwargs.use_ema: 
+    if optim_kwargs.use_ema:
         ema = ExponentialMovingAverage(
             score.parameters(),
             decay=optim_kwargs['ema_decay']
             )
+
+    # Optional resume hook -- backwards-compatible: if resume_from is unset
+    # or null, start_epoch=0 and grad_step=0 as before.
+    start_epoch, grad_step = 0, 0
+    try:
+        resume_from = optim_kwargs.get("resume_from", None)
+    except Exception:
+        resume_from = None
+    if resume_from is not None and str(resume_from).strip() != "":
+        start_epoch, grad_step = load_resume_state(
+            path=resume_from, score=score, ema=ema,
+            optimizer=optimizer, device=device,
+        )
 
     batch_size = optim_kwargs['batch_size']
 
@@ -88,8 +101,7 @@ def score_model_trainer(
 
     sample_logger.init_run()
 
-    grad_step = 0
-    for epoch in range(optim_kwargs['epochs']):
+    for epoch in range(start_epoch, optim_kwargs['epochs']):
         avg_loss, num_items = 0, 0
         with tqdm(enumerate(dataloader_train), total=len(dataloader_train)) as pbar:
             score.train()
@@ -121,7 +133,11 @@ def score_model_trainer(
                 epoch % optim_kwargs['save_model_every_n_epoch'] == 0 or epoch == optim_kwargs['epochs'] - 1)
             
             if should_save_model:
-                save_model(score=score, epoch=epoch, optim_kwargs=optim_kwargs, ema=ema)
+                save_model(
+                    score=score, epoch=epoch, optim_kwargs=optim_kwargs, ema=ema,
+                    sde=sde, device=device,
+                    optimizer=optimizer, grad_step=grad_step,
+                )
             
             if optim_kwargs.use_ema and (
                 grad_step > optim_kwargs['ema_warm_start_steps'] or epoch > 0):

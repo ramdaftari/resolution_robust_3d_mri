@@ -493,6 +493,9 @@ def main():
                         help="Save final reconstruction tensor as final_rec_<i>.pt in --out_dir.")
     parser.add_argument("--save_ground_truth", action="store_true",
                         help="Save ground-truth tensor as ground_truth_<i>.pt in --out_dir.")
+    parser.add_argument("--iterations",        type=int,   default=200,
+                        help="Number of inference iterations per volume "
+                             "(overrides outer_iterations_max and optimizer.iterations).")
     args = parser.parse_args()
     device = args.device
     if args.data_con_weight is not None:
@@ -743,7 +746,7 @@ def main():
             steps_data_reg=[0],
             slice_method_data_con=slice_method_data_con,
             slice_method_prior_reg=slice_method_prior_reg,
-            outer_iterations_max=200,
+            outer_iterations_max=args.iterations,
             score=score,
             sde=sde,
         )
@@ -753,7 +756,7 @@ def main():
             "use_l1wavelet_as_init":      False,
             "optimizer": {
                 "lr":                           2.0,
-                "iterations":                   200,
+                "iterations":                   args.iterations,
                 "clip_grad_max_norm":           None,
                 "gradient_acc_steps_data_con":  [0],
                 "gradient_acc_steps_prior_reg": [0],

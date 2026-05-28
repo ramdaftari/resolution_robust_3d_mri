@@ -1,0 +1,24 @@
+# @package _global_
+# Dense diffusion training on BraTS full-res single-coil LMDB (240x240x155).
+# UNet config identical to skmtea/train_dense.yaml (paper §4.1, App. A.1).
+defaults:
+  - brats/base_training
+  - override /sample_logger: without_target
+  - override /diffmodels: default_dense_cached
+
+diffmodels:
+  arch:
+    params:
+      channel_mult: [1, 2, 2, 2]
+      in_channels:  2
+      out_channels: 2
+      num_channels: 32
+
+problem_trafos:
+  dataset_trafo:
+    # Diverse-resolution training augmentation from paper §4.2 (Approach 1):
+    # per-slice bilinear downsample to a fraction sampled from this interval.
+    # Paper uses [0.1, 1.0] on Stanford/Calgary/AHEAD (min slice dim 256+).
+    # Full-res BraTS slices are 240x155 (axes 0, 1) and 240x240 (axis 2);
+    # smallest dim is 155. [0.1, 1.0] gives min dim ~16 — matches SKM-TEA.
+    target_interpolate_by_factor: [0.1, 1.0]

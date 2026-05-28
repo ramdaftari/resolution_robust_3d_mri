@@ -12,3 +12,9 @@ val_csv:   /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/val.csv
 test_csv:  /work/10471/peterwg/vista/r/3dmri_new/mri3d/src/datasets/test.csv
 
 echo: 1
+
+# Optional precomputed per-volume k-space Frobenius norms (sidecar JSON).
+# Used by `scale_target_by_kspacenorm` in the trafo; precomputing it avoids
+# a ~5.4 GB read per volume on first slice access. Generate with
+# precompute_skmtea_kspace_norms.py. Leave null to fall back to lazy compute.
+kspace_norms_path: null
