@@ -3,11 +3,20 @@
 """
 import logging
 import os
+import sys
+import traceback
 from functools import partial
 
 from typing import Callable
 
 import wandb
+
+# Write exceptions directly to fd 2 (bypasses wandb's sys.stderr wrapper)
+def _excepthook(exc_type, exc_value, exc_tb):
+    msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    os.write(2, msg.encode(errors='replace'))
+    os.fsync(2)
+sys.excepthook = _excepthook
 
 import torch
 from torch.utils.data import DataLoader
@@ -43,7 +52,7 @@ def get_dataloader(cfg_dataset, dataset_trafo,  cfg_dl, fold, device : str, path
     dataset = None
     if cfg_dl.cache_dataset and cfg_dl.cache_dataset_load_from_disk:
         if os.path.exists(cfg_dl.cache_dataset_disk_path):
-            dataset = torch.load(cfg_dl.cache_dataset_disk_path, map_location=cache_device)
+            dataset = torch.load(cfg_dl.cache_dataset_disk_path, map_location=cache_device, weights_only=False)
         else:
             logging.warning(f"Could not find cached dataset at {cfg_dl.cache_dataset_disk_path} -> Loading it from scratch.")
 
