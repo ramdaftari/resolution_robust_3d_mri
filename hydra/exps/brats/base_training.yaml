@@ -24,12 +24,14 @@ problem_trafos:
     # touching sens maps.
     target_type: 'mvue'
 
-    # target_scaling_factor: calibrated on half-res singlecoil (probe_brats_norm.py
-    # shows post-stage-1 median std ~2.85e-4; SKM-TEA's operating point is 1.44,
-    # so factor = 1.44 / 2.85e-4 ≈ 5050). With norm='ortho' FFT the
-    # sqrt(prod(shape))/||kspace||₂ ratio is resolution-independent (Parseval),
-    # so this factor is valid at full-res too.
-    target_scaling_factor: 5050.0
+    # kspace_vol_norm is now computed as ||target||_F (brats_slice_dataset.py),
+    # so scale_target_by_kspacenorm yields a per-volume RMS=1 target, exactly
+    # like Stanford/CC359 (ortho-FFT Parseval: ||K_full||_F == ||target||_F).
+    # Use the same target_scaling_factor=2.0 as Stanford/CC359
+    # (mri2d_train_calc_mvue.yaml default) — probe_brats_norm_v2.py confirms
+    # post-kspacenorm std ~0.92-0.93, so x2.0 lands at std~1.85, the same
+    # operating-point regime as SKM-TEA's std~1.44.
+    target_scaling_factor: 2.0
 
 dataset:
   fold: 'train'

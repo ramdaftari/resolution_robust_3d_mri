@@ -429,12 +429,10 @@ NORM_CONSTANT  = 3e7
 H5_BASE        = Path("/scratch/10846/armeet/datasets/skmtea/files_recon_calib-24")
 
 
-def _load_trafo_configs(train_cfg_path=None):
+def _load_trafo_configs():
     """
     Load trafo configs from the same YAML files reconstruct.py uses via hydra.
-    Applies the skmtea/varrecon_voxelrep_diffprior_4x + base_recon overrides by default.
-    If train_cfg_path is provided, reads problem_trafos.prior_trafo from it instead
-    (enables BraTS and other non-SKM-TEA models to use their training-time prior_trafo).
+    Applies the skmtea/varrecon_voxelrep_diffprior_4x + base_recon overrides.
     """
     fwd_cfg = OmegaConf.load(HYDRA_ROOT / "problem_trafos/fwd_trafo/mri3d.yaml")
     # mri3d.yaml already has mask_type='dataset'; apply varrecon_voxelrep override:
@@ -447,21 +445,9 @@ def _load_trafo_configs(train_cfg_path=None):
     target_kwargs = {k: v for k, v in OmegaConf.to_container(target_cfg).items() if k not in _SKIP}
 
     prior_cfg = OmegaConf.load(HYDRA_ROOT / "problem_trafos/prior_trafo/crop_mag.yaml")
-    if train_cfg_path is not None:
-        try:
-            tcfg = OmegaConf.load(train_cfg_path)
-            pt = tcfg.get("problem_trafos", {}).get("prior_trafo", {})
-            for k, v in OmegaConf.to_container(pt).items():
-                OmegaConf.update(prior_cfg, k, v)
-            logging.info(f"prior_trafo overrides from train_cfg: {OmegaConf.to_container(pt)}")
-        except Exception as e:
-            logging.warning(f"Could not read prior_trafo from {train_cfg_path}: {e}; using SKM-TEA defaults")
-            OmegaConf.update(prior_cfg, "scaling_factor", 2.0)
-            OmegaConf.update(prior_cfg, "move_axis", [-1, 1])
-    else:
-        # SKM-TEA defaults (skmtea/base_recon.yaml overrides)
-        OmegaConf.update(prior_cfg, "scaling_factor", 2.0)
-        OmegaConf.update(prior_cfg, "move_axis", [-1, 1])
+    # skmtea/base_recon.yaml overrides for prior_trafo:
+    OmegaConf.update(prior_cfg, "scaling_factor", 2.0)
+    OmegaConf.update(prior_cfg, "move_axis", [-1, 1])
     prior_kwargs = {k: v for k, v in OmegaConf.to_container(prior_cfg).items() if k not in _SKIP}
 
     sample_logger_cfg = OmegaConf.load(HYDRA_ROOT / "sample_logger/with_target.yaml")
@@ -507,29 +493,10 @@ def main():
                         help="Save final reconstruction tensor as final_rec_<i>.pt in --out_dir.")
     parser.add_argument("--save_ground_truth", action="store_true",
                         help="Save ground-truth tensor as ground_truth_<i>.pt in --out_dir.")
-    parser.add_argument("--iterations",        type=int,   default=200,
-                        help="Number of inference iterations per volume "
-                             "(overrides outer_iterations_max and optimizer.iterations).")
-    parser.add_argument("--ema_ckpt",  type=str, default=None,
-                        help="Path to EMA checkpoint (.pt). Overrides EMA_CKPT constant.")
-    parser.add_argument("--train_cfg", type=str, default=None,
-                        help="Path to training .hydra/config.yaml. Overrides TRAIN_CFG constant.")
-    parser.add_argument("--norm_constant", type=float, default=None,
-                        help="LMDB norm divisor. Default 3e7 (SKM-TEA). Use 1.0 for BraTS.")
-    parser.add_argument("--prior_scaling_factor", type=float, default=None,
-                        help="Override prior_trafo.scaling_factor after loading from train_cfg. "
-                             "Use 1.0 for BraTS (5050 is absorbed into the training distribution; "
-                             "normalize/unnormalize via 99th-pct MVUE handles scale internally — "
-                             "see CLAUDE.md gotcha #14). Default read from train_cfg (SKM-TEA=2.0).")
-    parser.add_argument("--target_scaling_factor", type=float, default=None,
-                        help="Override target_trafo.scaling_factor. Use 1.0 for BraTS "
-                             "(GT is already max=1; default crop_mag.yaml value of 2.0 "
-                             "inflates NMSE ~4× and deflates PSNR ~6 dB vs true values).")
-    parser.add_argument("--reg_strength", type=float, default=0.01,
+    parser.add_argument("--reg_strength",      type=float, default=0.01,
                         help="Diffusion prior regularization strength (default 0.01). "
                              "Set to 0.0 for pure data-consistency (no prior guidance).")
     args = parser.parse_args()
-    eff_norm = args.norm_constant if args.norm_constant is not None else NORM_CONSTANT
     device = args.device
     if args.data_con_weight is not None:
         global DATA_CON_WEIGHT
@@ -543,29 +510,21 @@ def main():
                mode="disabled" if args.no_wandb else "online")
 
     # ---- Load trafo configs from YAML ----------------------------------------
-    train_cfg_path = Path(args.train_cfg) if args.train_cfg else TRAIN_CFG
     (fwd_name,    fwd_kwargs,
      target_name, target_kwargs,
      prior_name,  prior_kwargs,
-     sl_kwargs) = _load_trafo_configs(train_cfg_path=Path(args.train_cfg) if args.train_cfg else None)
+     sl_kwargs) = _load_trafo_configs()
 
     fwd_trafo    = get_fwd_trafo(name=fwd_name,       **fwd_kwargs)
     target_trafo = get_target_trafo(name=target_name, **target_kwargs)
     prior_trafo  = get_prior_trafo(name=prior_name,   **prior_kwargs)
-    if args.prior_scaling_factor is not None:
-        prior_trafo.scaling_factor = args.prior_scaling_factor
-        logging.info(f"prior_trafo.scaling_factor overridden to {args.prior_scaling_factor}")
-    if args.target_scaling_factor is not None:
-        target_trafo.scaling_factor = args.target_scaling_factor
-        logging.info(f"target_trafo.scaling_factor overridden to {args.target_scaling_factor}")
     if args.crop_prior:
         prior_trafo.center_crop_enabled = True
         prior_trafo.crop_size = (320, 320)
         logging.info("prior_trafo: center_crop_enabled=True  crop_size=(320, 320)")
 
     # ---- Score model + SDE ---------------------------------------------------
-    ema_ckpt_path = Path(args.ema_ckpt) if args.ema_ckpt else EMA_CKPT
-    score = load_score_model_direct(ema_ckpt_path, train_cfg_path, device)
+    score = load_score_model_direct(EMA_CKPT, TRAIN_CFG, device)
     score = ScoreWithIdentityGradWrapper(module=score)
     sde   = DDPM(beta_min=0.0001, beta_max=0.02, num_steps=1000)
 
@@ -612,7 +571,7 @@ def main():
     else:
         # LMDB: QR (128×128×80) or half-res (256×256×160)
         lmdb_path = Path(args.lmdb) if args.lmdb else VAL_LMDB
-        vol_ds    = LMDBVolumeDataset(root_dir=lmdb_path, norm_constant=eff_norm)
+        vol_ds    = LMDBVolumeDataset(root_dir=lmdb_path, norm_constant=3e7)
         num_volumes = min(args.num_volumes, len(vol_ds) - args.vol_start)
         logging.info(f"LMDB: {len(vol_ds)} vols at {lmdb_path}  ({num_volumes} to process)")
 
@@ -673,8 +632,8 @@ def main():
             # Re-apply mask before passing to fwd_trafo (kspace_up is non-zero
             # everywhere from SENSE forward; fwd_trafo expects zero at unsampled
             # positions for correct data-consistency loss).
-            kspace_clean = (kspace_up * mask_up) / eff_norm   # (C, X, Y, 2Z) complex
-            target_norm  = target_up / eff_norm
+            kspace_clean = (kspace_up * mask_up) / NORM_CONSTANT   # (C, X, Y, 2Z) complex
+            target_norm  = target_up / NORM_CONSTANT
 
             dtype        = torch.get_default_dtype()
             observation  = torch.view_as_real(kspace_clean).to(dtype=dtype, device=device)
@@ -697,41 +656,21 @@ def main():
             target = batch.target.squeeze(0)   # (1, X, Y, Z) complex
             mask   = batch.mask.squeeze(0)     # (1, X, Y, Z) complex  m*(1+j)
 
-            # FFT convention fix: LMDB kspace = np.fft.fftn(img) (uncentered, DC at corner).
-            # fwd_trafo uses fft3c/ifft3c (centered, DC at center). Passing uncentered kspace
-            # to ifft3c gives checkerboard-modulated + spatially-shifted output: NOT the ZF recon.
-            # Fix: recompute centered kspace from the target (ground truth) image. The LMDB
-            # target is the same max-normalized image the kspace was derived from, so this is
-            # lossless — we just recompute in the correct convention.
-            from src.utils.fftn3d import fft3c as _fft3c
+            # Correct mask bug: m*(1+j)*k → m*k   [(1+j)*(1-j)/2 = 1]
+            kspace_clean = kspace * torch.tensor((1 - 1j) / 2, dtype=torch.complex64)
 
             dtype        = torch.get_default_dtype()
-            target_img   = target.squeeze(0)                                        # (X, Y, Z) complex
-            K_c          = _fft3c(torch.view_as_real(target_img).to(dtype=dtype))  # (X, Y, Z, 2) centered
+            observation  = torch.view_as_real(kspace_clean).to(dtype=dtype, device=device)
+            ground_truth = torch.view_as_real(target.squeeze(0)).to(dtype=dtype, device=device)
 
-            # LMDB mask was applied in uncentered-kspace coordinates → fftshift to align
-            # with centered convention. Also use the full 3D mask (not just one X-slice).
-            mask_uc      = mask.real.squeeze(0).float()                             # (X, Y, Z) binary
-            mask_c       = torch.fft.fftshift(mask_uc, dim=(-3, -2, -1))           # (X, Y, Z) centered
-            mask_binary  = mask_c.unsqueeze(-1)                                     # (X, Y, Z, 1)
-
-            # Stanford-Knee/CC359 normalization: kspace_vol_norm = ||K_full||_F
-            # (full unmasked centered ortho k-space; Parseval-equal to ||target||_F,
-            # matching brats_slice_dataset.py's training-time convention), and both
-            # observation and target are scaled by sqrt(prod(shape)) / kspace_vol_norm.
-            kspace_vol_norm = K_c.norm().item()
-            kspace_scale    = math.sqrt(float(np.prod(K_c.shape))) / kspace_vol_norm
-
-            observation  = (K_c * mask_binary.to(K_c.device) * kspace_scale).to(device=device)  # (X, Y, Z, 2)
-            ground_truth = (torch.view_as_real(target_img).to(dtype=dtype) * kspace_scale).to(device=device)
-            sens_maps_np = maps.permute(1, 2, 3, 0).numpy()                        # (X, Y, Z, C)
+            sens_maps_np = maps.permute(1, 2, 3, 0).numpy()          # (X, Y, Z, C)
+            mask_binary  = mask.real[0, 0, :, :].unsqueeze(-1)       # (Y, Z, 1)
 
             if i == 0:
-                logging.info(f"target {tuple(target_img.shape)}  "
-                             f"|max|={target_img.abs().max():.4f}  "
-                             f"kspace_vol_norm={kspace_vol_norm:.4f}  kspace_scale={kspace_scale:.6f}  "
-                             f"obs |max|={observation.abs().max():.4f}  "
-                             f"mask density={mask_c.mean():.3f}")
+                logging.info(f"kspace {tuple(kspace.shape)}  "
+                             f"stored |max|={kspace.abs().max():.4f}  "
+                             f"cleaned |max|={kspace_clean.abs().max():.4f}  "
+                             f"target |max|={target.abs().max():.4f}")
 
         # ------------------------------------------------------------------
         # Common pipeline (identical for all three resolutions)
@@ -765,16 +704,11 @@ def main():
         })
         mesh_data_con = get_mesh(mesh_cfg, device=device)
 
-        if args.full_res:
-            scaling_factor = (
-                math.sqrt(float(np.prod(rep_shape)))
-                / observation.detach().cpu().norm().item()
-                * 1.0
-            )
-        else:
-            # BraTS LMDB path: kspace_scale already applied to observation/ground_truth
-            # above (Stanford-Knee/CC359 convention), so no further rescaling needed.
-            scaling_factor = 1.0
+        scaling_factor = (
+            math.sqrt(float(np.prod(rep_shape)))
+            / observation.detach().cpu().norm().item()
+            * 1.0
+        )
         if i == 0:
             logging.info(f"scaling_factor={scaling_factor:.6f}  "
                          f"obs_norm={observation.detach().cpu().norm():.2f}")
@@ -812,7 +746,7 @@ def main():
             steps_data_reg=[0],
             slice_method_data_con=slice_method_data_con,
             slice_method_prior_reg=slice_method_prior_reg,
-            outer_iterations_max=args.iterations,
+            outer_iterations_max=200,
             score=score,
             sde=sde,
         )
@@ -822,7 +756,7 @@ def main():
             "use_l1wavelet_as_init":      False,
             "optimizer": {
                 "lr":                           2.0,
-                "iterations":                   args.iterations,
+                "iterations":                   200,
                 "clip_grad_max_norm":           None,
                 "gradient_acc_steps_data_con":  [0],
                 "gradient_acc_steps_prior_reg": [0],

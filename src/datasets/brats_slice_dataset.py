@@ -188,10 +188,14 @@ class BratsSliceDataset(BaseDataset):
         # target_full shape is (1, X, Y, Z) — drop the leading singleton channel.
         target_full = self._read_array(self.env_target, vk, tuple(shp["target"]))[0]
 
-        # kspace_vol_norm on the RAW 3D k-space, before any IFFT, so it
-        # matches fastmri_slice_dataset.py:262 (`np.linalg.norm(hf["kspace"])`).
-        # See module docstring for why this is computed pre-IFFT.
-        norm = float(np.linalg.norm(kspace))
+        # kspace_vol_norm = ||target||_F. For Stanford/CC359 (ortho FFT,
+        # full unmasked k-space), ||K_full||_F == ||target||_F by Parseval,
+        # so scale_target_by_kspacenorm reduces to target /= RMS(target).
+        # BraTS's stored k-space is masked + backward-FFT'd, so
+        # np.linalg.norm(kspace) is ~3000x too large; use ||target||_F
+        # directly to get the same RMS=1 normalization (scale-invariant,
+        # so unaffected by the LMDB's [0,1] max-normalization of target).
+        norm = float(np.linalg.norm(target_full))
 
         # 1D IFFT along readout (axis 1+readout_axis in the (C,X,Y,Z) layout).
         ax = 1 + self.readout_axis
